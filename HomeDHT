@@ -1,0 +1,105 @@
+// Date and time functions using a DS1307 RTC connected via I2C and Wire lib
+#include <Wire.h>
+#include "RTClib.h"
+#include "U8glib.h"
+U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NONE|U8G_I2C_OPT_DEV_0);  // I2C / TWI 
+#include "DHT.h"
+#define DHTPIN 2     // what digital pin we're connected to
+// Uncomment whatever type you're using!
+//#define DHTTYPE DHT11   // DHT 11
+#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
+//#define DHTTYPE DHT21   // DHT 21 (AM2301)
+DHT dht(DHTPIN, DHTTYPE);
+
+bool blinkflag=true;
+
+#include "floatToString.h"  //set to whatever is the location of floatToStrig
+char str[256];
+char buffer[256];
+
+RTC_DS1307 rtc;
+//char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+char daysOfTheWeek[7][12] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
+
+void setup () {
+  pinMode(LED_BUILTIN, OUTPUT);
+  
+  pinMode(3, OUTPUT);   //D3 for DHT power
+  digitalWrite(3, HIGH);
+
+  // flip screen, if required
+  //u8g.setRot180();
+  
+  Serial.begin(9600);
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    while (1);  
+  }
+
+  if (! rtc.isrunning()) {
+    Serial.println("RTC is NOT running!");
+    // following line sets the RTC to the date & time this sketch was compiled
+    // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    // This line sets the RTC with an explicit date & time, for example to set
+    // January 21, 2014 at 3am you would call:
+    //rtc.adjust(DateTime(2017, 3, 25, 22, 18, 03));
+  }
+}
+
+void loop () {
+    float  h = dht.readHumidity();
+    // Read temperature as Celsius (the default)
+    float  t = dht.readTemperature();
+  
+    DateTime now = rtc.now();
+    if(analogRead(A0)>960 && analogRead(A1)<250){   //adj time
+      rtc.adjust(DateTime(now.year(), now.month(), now.day(), now.hour(), now.minute(),now.second()-1));
+    }
+    if(analogRead(A1)>960 && analogRead(A0)<250){   //adj time
+      rtc.adjust(DateTime(now.year(), now.month(), now.day(), now.hour(), now.minute(),now.second()+1));
+    }
+ 
+  // picture loop
+    u8g.firstPage();  
+    do {
+      // graphic commands to redraw the complete screen should be placed here
+      u8g.setFont(u8g_font_unifont);
+      //u8g.setFont(u8g_font_osb21);
+      sprintf(&str[0],"%02d/",now.month());
+      sprintf(&str[3],"%02d  ",now.day());
+      sprintf(&str[6],"%02d:",now.hour());
+      sprintf(&str[9],"%02d:",now.minute());
+      sprintf(&str[12],"%02d",now.second());
+      str[14]=daysOfTheWeek[now.dayOfTheWeek()][0];
+      str[15]=daysOfTheWeek[now.dayOfTheWeek()][1];    
+      str[16] = '\0';
+      u8g.drawStr( 0, 16, str);
+      //sprintf(str, "Temperature:%f", t);    //error.display "?"
+      floatToString(buffer, t , 1);
+      strcpy(str,"Temperature:");
+      strcat(str,buffer);
+      u8g.drawStr( 0, 32, str);
+     //sprintf(str, "Humidity:%f", h);
+      floatToString(buffer, h , 1);
+      strcpy(str,"Humidity:");
+      strcat(str,buffer);
+      u8g.drawStr( 0, 48, str);
+      
+      itoa(now.year(),buffer,10);
+      strcpy(str,"        DHT@");
+      strcat(str,buffer);
+      u8g.drawStr( 0, 64, str);
+      
+    } while( u8g.nextPage() );
+// rebuild the picture after some delay     
+
+    if(blinkflag==true){
+      digitalWrite(LED_BUILTIN, HIGH);    //blink
+      blinkflag=false;
+    }else{
+      digitalWrite(LED_BUILTIN, LOW); 
+      blinkflag=true;      
+    }
+ 
+    delay(333);
+}
